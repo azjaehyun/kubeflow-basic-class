@@ -65,7 +65,7 @@ resource "aws_security_group_rule" "terra-middle-cluster-ingress-workstation-htt
 resource "aws_eks_cluster" "master_node" {
   name     = local.cluster_name
   role_arn = aws_iam_role.terra-middle-cluster.arn
-  version                   = "1.28"
+  version                   = "1.24"
   vpc_config {
     security_group_ids = [aws_security_group.terra-middle-cluster.id]
     #subnet_ids         = aws_subnet.demo[*].id

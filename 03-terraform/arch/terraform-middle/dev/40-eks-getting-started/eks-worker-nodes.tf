@@ -45,7 +45,7 @@ resource "aws_eks_node_group" "node" {
   node_role_arn   = aws_iam_role.cluster-node.arn
   #subnet_ids      = aws_subnet.demo[*].id
   subnet_ids      = tolist(data.aws_subnets.private.ids)
-  instance_types = ["t2.medium"]
+  instance_types = ["t2.xlarge"]
   disk_size = 50
   
   remote_access {
