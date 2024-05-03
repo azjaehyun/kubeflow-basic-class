@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="terraform_0.12.24_darwin_amd64">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/10-terraform/terraform_0.12.24_darwin_amd64.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
