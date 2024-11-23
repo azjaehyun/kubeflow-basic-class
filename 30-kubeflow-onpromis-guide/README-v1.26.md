@@ -1,16 +1,12 @@
-# Kubernetes v1.29.0 Ubuntu On-premise 설치 가이드
+
+# Kubernetes v1.26.0 Ubuntu On-premise 설치 가이드
 
 ## 1. kubectl, kubeadm, kubelet 설치 (Master, Worker 노드 공통)
 ```bash
 curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 sudo apt update -y
-# 설치 가능한 kubelet, kubeadm, kubectl 버전 확인
-apt-cache madison kubelet
-
-# 위 명령어로 설치 가능한 버전을 확인한 후, 원하는 버전을 선택하여 설치합니다.
-# 예시: kubelet=1.29.0-00, kubeadm=1.29.0-00, kubectl=1.29.0-00
-sudo apt -y install vim git curl wget kubelet=<버전> kubeadm=<버전> kubectl=<버전>
+sudo apt -y install vim git curl wget kubelet=1.26.0-00 kubeadm=1.26.0-00 kubectl=1.26.0-00
 sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
@@ -74,9 +70,9 @@ sudo systemctl enable containerd
 
 ---
 
-## 4. Kubernetes 1.29 이미지 Pull (Master, Worker 노드 공통)
+## 4. Kubernetes 1.26 이미지 Pull (Master, Worker 노드 공통)
 ```bash
-sudo kubeadm config images pull --image-repository=registry.k8s.io --cri-socket unix:///run/containerd/containerd.sock --kubernetes-version v1.29.0
+sudo kubeadm config images pull --image-repository=registry.k8s.io --cri-socket unix:///run/containerd/containerd.sock --kubernetes-version v1.26.0
 ```
 
 ---
