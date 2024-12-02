@@ -7,25 +7,66 @@ Kubeflow 환경에서 제공하신 모델을 배포하고 사용할 수 있도�
 ### 1. 도커 이미지 생성
 먼저 FastAPI 애플리케이션을 Docker 이미지로 패키징해야 합니다. 이 Docker 이미지는 모델을 서빙할 API를 포함하며, Kubernetes 클러스터에서 컨테이너로 실행될 수 있습니다.
 
-#### 1.1 `Dockerfile` 작성
+#### 1.1 `FAST API 기반 Dockerfile` 작성 
+```dockerfile
+# Base image with Python 3.9
+FROM python:3.9-slim
+
+# Set environment variables to prevent Python from writing pyc files and buffering stdout/err
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy requirements file to container
+COPY requirements.txt /app/
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY app.py /app/
+COPY modeling /app/modeling/
+COPY data_manager /app/data_manager/
+COPY utils /app/utils/
+
+# Copy the model and meta.bin files (모델은 파일이 너무 커서 생략)
+COPY ckpt/result_model/pytorch_model.bin /app/ckpt/result_model/
+COPY ckpt/result_model/meta.bin /app/ckpt/result_model/  
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Run the FastAPI application
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+```
+
+#### 1.2 `vLLM 기반 Dockerfile` 작성 
 ```dockerfile
 FROM python:3.8-slim
 
+# 작업 디렉토리 생성 및 설정
 WORKDIR /app
 
+# 필요한 시스템 종속성 설치
+RUN apt-get update && apt-get install -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 패키지 설치를 위한 파일 복사
 COPY requirements.txt .
+
+# Python 패키지 설치
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
-COPY ckpt/result_model/pytorch_model.bin ./ckpt/result_model/
-COPY ckpt/result_model/meta.bin ./ckpt/result_model/
-COPY modeling/ ./modeling/
-COPY data_manager/ ./data_manager/
-COPY utils/ ./utils/
+# 모델 파일 복사  ( 40-AI-model ) 
+COPY ckpt/result_model/pytorch_model.bin /app/pytorch_model.bin
+COPY ckpt/result_model/meta.bin /app/meta.bin
 
-EXPOSE 8000
-
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# vLLM 실행 명령을 컨테이너 시작 시 실행되도록 설정
+CMD ["vllm", "serve", "--model", "/app", "--port", "8000"]
 ```
 
 #### 1.2 Docker 이미지 빌드 및 푸시
@@ -111,12 +152,64 @@ if __name__ == '__main__':
 ```
 이 코드는 Docker 이미지를 사용해 모델을 배포하는 파이프라인을 정의합니다.
 
+
+
 ### 3. 파이프라인 실행
 Kubeflow UI에 접속한 후, 작성한 파이프라인 정의 파일(`absa_pipeline.yaml`)을 업로드하고 실행할 수 있습니다.
 - Kubeflow UI에서 **Experiments**로 이동하여 새로운 실험을 만들고, 작성한 파이프라인을 실행합니다.
 - 파이프라인의 단계 중 `Deploy ABSA Model`이 실행되면서 Kubernetes 클러스터에 모델이 배포됩니다.
 
-### 4. 모델 서빙 테스트
+
+## 4. absa_pipeline.yaml 예시
+
+Kubeflow 파이프라인을 정의하는 `absa_pipeline.yaml` 파일은 다음과 같은 형식으로 작성됩니다:
+
+```yaml
+pipelineInfo:
+  name: ABSA Model Deployment Pipeline
+  description: A pipeline to deploy ABSA model using Kubeflow
+sdkVersion: kfp-1.4.0
+schemaVersion: 2.0.0
+tasks:
+  deploy-absa-model:
+    container:
+      image: your-dockerhub-username/absa-model:latest
+      command:
+      - sh
+      - -c
+      - kubectl apply -f /app/deployment.yaml
+      args: []
+    name: Deploy ABSA Model
+    dependencies: []
+deploymentSpec:
+  executorGroups:
+  - executors:
+    - name: deploy-absa-model
+      container:
+        image: your-dockerhub-username/absa-model:latest
+        command:
+        - sh
+        - -c
+        - kubectl apply -f /app/deployment.yaml
+      inputs: []
+      outputs: []
+    name: executor-group-0
+  components: []
+```
+
+이 파일은 Kubeflow에서 파이프라인을 정의하고 실행하는데 사용되며, 모델 배포 작업을 자동화하는 워크플로우의 일부로 활용됩니다.
+
+## 요약
+- **Kubeflow Pipelines Recurring Run**: 특정 시간에 파이프라인을 자동으로 실행하여 배포 포함 전체 워크플로우를 관리.
+- **Kubernetes CronJob**: `kubectl` 명령을 정해진 시간에 실행하여 배포 작업을 수행.
+- **Argo Workflow 스케줄링**: Argo CLI를 사용하여 워크플로우 스케줄링 가능.
+- **Kubeflow CLI 사용**: Kubeflow CLI (`kfp`)를 사용하여 파이프라인을 명령줄에서 등록 및 실행 가능.
+- **absa_pipeline.yaml**: Kubeflow 파이프라인 정의 파일로, 배포 작업을 자동화하는 데 사용.
+
+이러한 방법들을 통해 특정 시간에 모델을 배포하거나, 주기적으로 실행하도록 스케줄링하여 배포 프로세스를 자동화할 수 있습니다.
+
+
+### 5. 모델 서빙 테스트
 모델이 정상적으로 배포되었다면, `absa-model-service`를 통해 클러스터 외부에서 접근할 수 있는 LoadBalancer IP 주소를 확인할 수 있습니다.
 - 외부 IP 주소로 `/predict` 엔드포인트에 요청을 보내 모델의 예측 결과를 확인할 수 있습니다.
 - 예를 들어:
@@ -125,9 +218,3 @@ Kubeflow UI에 접속한 후, 작성한 파이프라인 정의 파일(`absa_pipe
   ```
   위 명령어를 사용해 클라이언트에서 모델 API를 호출하고 응답을 받을 수 있습니다.
 
-## 추가 고려 사항
-- **모니터링**: Kubeflow의 Katib이나 Prometheus와 Grafana 등을 이용하여 모델의 성능 및 시스템 리소스를 모니터링할 수 있습니다.
-- **자동 스케일링**: Kubernetes Horizontal Pod Autoscaler(HPA)를 사용하여 트래픽에 따라 모델 서빙 컨테이너의 수를 자동으로 조절할 수 있습니다.
-- **파이프라인 확장**: 이 파이프라인은 배포만을 포함하고 있지만, 학습, 평가, 배포, 테스트까지 이어지는 End-to-End 워크플로우로 확장할 수 있습니다.
-
-위 과정을 통해 Kubeflow를 사용하여 모델을 쉽게 배포하고 관리할 수 있습니다. Kubeflow는 특히 여러 단계의 머신러닝 워크플로우를 자동화하고 재사용 가능한 방식으로 관리할 때 매우 유용합니다.
