@@ -26,12 +26,20 @@ nfs_volume_mount = V1VolumeMount(
 )
 
 # S3에서 파일을 다운로드하는 작업 정의
+# 사전 작업
+#  kubectl create secret generic aws-s3-secret \
+#  --from-literal=AWS_ACCESS_KEY_ID=your-access-key \
+#  --from-literal=AWS_SECRET_ACCESS_KEY=your-secret-key
+
 def download_from_s3_op(bucket_name: str, object_key: str):
     return dsl.ContainerOp(
         name='Download From S3',
         image='amazon/aws-cli',
         command=['aws', 's3', 'cp', f's3://{bucket_name}/{object_key}', '/data/input_file']
     ).add_volume(nfs_volume).add_volume_mount(nfs_volume_mount)
+     .add_env_from(V1EnvFromSource(
+        secret_ref=V1SecretEnvSource(name='aws-s3-secret')
+    ))
 
 # 모델을 학습시키는 작업 정의
 def train_model_op(input_path: str):
@@ -96,16 +104,124 @@ def s3_model_pipeline(bucket_name: str, object_key: str, ecr_repo: str, old_mode
 kfp.compiler.Compiler().compile(s3_model_pipeline, 's3_model_pipeline.yaml')
 ```
 
+
+
 ## 9. 파이프라인 모니터링 및 디버깅
+## s3_model_pipeline.yaml compiler 결과값
 
-### 설명
-- Kubeflow UI에서 파이프라인의 실행 상태를 모니터링하는 방법
-- 로그 확인과 디버깅을 통해 문제를 해결하는 방법
+```
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: s3-model-pipeline-
+  annotations:
+    pipelines.kubeflow.org/kfp_sdk_version: 1.8.11
+    pipelines.kubeflow.org/pipeline_spec: |
+      {
+        "description": "Pipeline that trains a model from S3 data and conditionally deploys it.",
+        "inputs": [
+          {
+            "name": "bucket_name",
+            "type": "String",
+            "description": "The name of the S3 bucket where input data is stored.",
+            "default": "my-default-bucket"
+          },
+          {
+            "name": "object_key",
+            "type": "String",
+            "description": "The key of the S3 object to download.",
+            "default": "data/input-file.csv"
+          },
+          {
+            "name": "ecr_repo",
+            "type": "String",
+            "description": "The Amazon ECR repository to upload the trained model.",
+            "default": "my-ecr-repo"
+          },
+          {
+            "name": "old_model_path",
+            "type": "String",
+            "description": "The path to the existing model for comparison.",
+            "default": "/data/old_model"
+          }
+        ]
+      }
+spec:
+  entrypoint: s3-model-pipeline
+  templates:
+  - name: s3-model-pipeline
+    inputs:
+      parameters:
+      - name: bucket_name
+      - name: object_key
+      - name: ecr_repo
+      - name: old_model_path
+    dag:
+      tasks:
+      - name: download-from-s3
+        template: download-from-s3
+        arguments:
+          parameters:
+          - name: bucket_name
+            value: '{{inputs.parameters.bucket_name}}'
+          - name: object_key
+            value: '{{inputs.parameters.object_key}}'
+      - name: train-model
+        dependencies: [download-from-s3]
+        template: train-model
+        arguments:
+          parameters:
+          - name: input_path
+            value: '{{tasks.download-from-s3.outputs.artifacts.output}}'
+      - name: upload-to-ecr
+        dependencies: [train-model]
+        template: upload-to-ecr
+        arguments:
+          parameters:
+          - name: model_path
+            value: '{{tasks.train-model.outputs.artifacts.output}}'
+          - name: ecr_repo
+            value: '{{inputs.parameters.ecr_repo}}'
+      - name: evaluate-model
+        dependencies: [train-model]
+        template: evaluate-model
+        arguments:
+          parameters:
+          - name: new_model_path
+            value: '{{tasks.train-model.outputs.artifacts.output}}'
+          - name: old_model_path
+            value: '{{inputs.parameters.old_model_path}}'
+      - name: deploy-model
+        dependencies: [evaluate-model]
+        template: deploy-model
+        arguments:
+          parameters:
+          - name: model_path
+            value: '{{tasks.train-model.outputs.artifacts.output}}'
+        when: '{{tasks.evaluate-model.outputs.parameters.result}} == better'
+  templates:
+  - name: download-from-s3
+    container:
+      image: amazon/aws-cli
+      command: ['aws', 's3', 'cp', 's3://{{inputs.parameters.bucket_name}}/{{inputs.parameters.object_key}}', '/data/input_file']
+  - name: train-model
+    container:
+      image: my-custom-image:latest
+      command: ['python', 'train.py']
+      args: ['--input', '{{inputs.parameters.input_path}}', '--output', '/data/model']
+  - name: upload-to-ecr
+    container:
+      image: amazon/aws-cli
+      command: ['aws', 'ecr', 'put-image', '--repository-name', '{{inputs.parameters.ecr_repo}}', '--image', '{{inputs.parameters.model_path}}']
+  - name: evaluate-model
+    container:
+      image: my-evaluation-image:latest
+      command: ['python', 'evaluate.py']
+      args: ['--new_model', '{{inputs.parameters.new_model_path}}', '--old_model', '{{inputs.parameters.old_model_path}}', '--output', '/data/evaluation_result']
+  - name: deploy-model
+    container:
+      image: my-deployment-image:latest
+      command: ['python', 'deploy.py']
+      args: ['--model', '{{inputs.parameters.model_path}}']
 
-### 실습
-- Kubeflow Dashboard에서 파이프라인 모니터링 실습
-- 각 단계의 로그를 확인하고 오류 해결 방법 탐구
-
----
-
-이 커리큘럼은 Kubeflow Pipelines를 학습하는 데 필요한 단계들을 포괄적으로 다룹니다. 각 섹션은 점진적으로 난이도가 올라가며, 실습을 통해 개념을 확실히 익히도록 설계되었습니다. 필요에 따라 추가적인 설명이나 실습 자료를 보강할 수 있습니다.
+```
