@@ -8,53 +8,73 @@
 ```python
 import kfp
 from kfp import dsl
-from kfp.components import create_component_from_func
+from kubernetes.client.models import V1Volume, V1VolumeMount
+
+# NFS 볼륨 정의
+nfs_volume = V1Volume(
+    name='nfs-volume',
+    nfs={
+        'server': '<NFS_SERVER_IP>',
+        'path': '/path/to/nfs/share'  # NFS 서버 경로
+    }
+)
+
+# NFS 볼륨 마운트
+nfs_volume_mount = V1VolumeMount(
+    name='nfs-volume',
+    mount_path='/data'  # 모든 작업이 /data를 공유
+)
 
 # S3에서 파일을 다운로드하는 작업 정의
 def download_from_s3_op(bucket_name: str, object_key: str):
     return dsl.ContainerOp(
-        name='Download From S3',  # 작업 이름
-        image='amazon/aws-cli',  # 사용할 Docker 이미지
-        command=['aws', 's3', 'cp', f's3://{bucket_name}/{object_key}', '/data/input_file']  # S3에서 파일을 복사하는 명령어
-    )
+        name='Download From S3',
+        image='amazon/aws-cli',
+        command=['aws', 's3', 'cp', f's3://{bucket_name}/{object_key}', '/data/input_file']
+    ).add_volume(nfs_volume).add_volume_mount(nfs_volume_mount)
 
 # 모델을 학습시키는 작업 정의
 def train_model_op(input_path: str):
     return dsl.ContainerOp(
-        name='Train Model',  # 작업 이름
-        image='my-custom-image:latest',  # 사용할 Docker 이미지 (모델 학습 코드 포함)
-        command=['python', 'train.py'],  # 학습 스크립트 실행
-        arguments=['--input', input_path, '--output', '/data/model']  # 입력 파일 경로와 출력 모델 경로 전달
-    )
+        name='Train Model',
+        image='my-custom-image:latest',
+        command=['python', 'train.py'],
+        arguments=['--input', input_path, '--output', '/data/model']
+    ).add_volume(nfs_volume).add_volume_mount(nfs_volume_mount)
 
 # 학습된 모델을 ECR에 업로드하는 작업 정의
 def upload_to_ecr_op(model_path: str, ecr_repo: str):
     return dsl.ContainerOp(
-        name='Upload to ECR',  # 작업 이름
-        image='amazon/aws-cli',  # 사용할 Docker 이미지
-        command=['aws', 'ecr', 'put-image', '--repository-name', ecr_repo, '--image', model_path]  # ECR에 이미지 업로드 명령어
-    )
+        name='Upload to ECR',
+        image='amazon/aws-cli',
+        command=['aws', 'ecr', 'put-image', '--repository-name', ecr_repo, '--image', model_path]
+    ).add_volume(nfs_volume).add_volume_mount(nfs_volume_mount)
 
 # 새로운 모델과 기존 모델을 평가하는 작업 정의
 def evaluate_model_op(new_model_path: str, old_model_path: str):
     return dsl.ContainerOp(
-        name='Evaluate Model',  # 작업 이름
-        image='my-evaluation-image:latest',  # 사용할 Docker 이미지 (평가 코드 포함)
-        command=['python', 'evaluate.py'],  # 평가 스크립트 실행
-        arguments=['--new_model', new_model_path, '--old_model', old_model_path]  # 새로운 모델과 기존 모델 경로 전달
-    )
+        name='Evaluate Model',
+        image='my-evaluation-image:latest',
+        command=['python', 'evaluate.py'],
+        arguments=[
+            '--new_model', new_model_path,
+            '--old_model', old_model_path,
+            '--output', '/data/evaluation_result'
+        ],
+        file_outputs={'result': '/data/evaluation_result'}  # 평가 결과를 Kubeflow 출력으로 정의
+    ).add_volume(nfs_volume).add_volume_mount(nfs_volume_mount)
 
 # 성능이 좋은 모델을 배포하는 작업 정의
 def deploy_model_op(model_path: str):
     return dsl.ContainerOp(
-        name='Deploy Model',  # 작업 이름
-        image='my-deployment-image:latest',  # 사용할 Docker 이미지 (배포 코드 포함)
-        command=['python', 'deploy.py'],  # 배포 스크립트 실행
-        arguments=['--model', model_path]  # 배포할 모델 경로 전달
-    )
+        name='Deploy Model',
+        image='my-deployment-image:latest',
+        command=['python', 'deploy.py'],
+        arguments=['--model', model_path]
+    ).add_volume(nfs_volume).add_volume_mount(nfs_volume_mount)
 
 # 전체 파이프라인 정의
-dsl.pipeline(
+@dsl.pipeline(
     name='S3 to Model Training Pipeline',
     description='Pipeline that trains a model from S3 data and conditionally deploys it.'
 )
@@ -69,10 +89,11 @@ def s3_model_pipeline(bucket_name: str, object_key: str, ecr_repo: str, old_mode
     evaluate_step = evaluate_model_op(train_step.output, old_model_path)
 
     # 평가 결과가 'better'이면 모델을 배포
-    with dsl.Condition(evaluate_step.output == 'better'):
+    with dsl.Condition(evaluate_step.outputs['result'] == 'better'):
         deploy_model_op(train_step.output)
 
-# 파이프라인을 YAML 파일로 컴파일\kfp.compiler.Compiler().compile(s3_model_pipeline, 's3_model_pipeline.yaml')
+# 파이프라인을 YAML 파일로 컴파일
+kfp.compiler.Compiler().compile(s3_model_pipeline, 's3_model_pipeline.yaml')
 ```
 
 ## 9. 파이프라인 모니터링 및 디버깅
