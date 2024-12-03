@@ -16,10 +16,14 @@ __NIA 데이터 구축과제(ABSA)__ 의 데이터 품질 검사용으로 구현
 ## Model Description
 ***
 ![image](./resources/image/absa_bert-crf-architecture.png)
+
+
+
 - Sentiment와 대분류 Aspect Category 예측에 동일한 BERT(klue-bert)를 사용
 - Dropout Layer와 Linear Layer, CRF layer는 각기 다른 layer를 사용
 - loss function은 NLL(Negative Log Likelihood) Loss
 - 최종 loss를 대분류 Aspect Category loss와 Sentiment Loss의 평균으로 계산하는 joint training 방식의 학습 구조
+
 
 
 ## ABOUT DATA
