@@ -90,3 +90,26 @@ requests
 - 빌드한 이미지를 기반으로 컨테이너를 실행하면 vLLM 서버가 실행되고, 다른 서비스(예: FastAPI)에서 이를 호출할 수 있습니다.
 
 이렇게 하면 Docker 컨테이너 내에서 모델 서빙이 자동으로 이루어지므로 편리하게 사용할 수 있습니다.
+
+
+## REST API 요청 샘플
+
+### 요청 예시 (HTTP POST 요청)
+- **URL**: `http://localhost:8000/predict`
+- **Headers**: `Content-Type: application/json`
+- **Body**:
+  ```json
+  {
+    "text": "이 제품은 정말 좋았습니다! 배송도 빠르고 품질도 훌륭하네요."
+  }
+  ```
+
+### 응답 예시 (HTTP 응답)
+- **응답 예시**:
+  ```json
+  {
+    "sentiment": "positive",
+    "aspect": "배송",
+    "aspect2": "품질"
+  }
+  ```
