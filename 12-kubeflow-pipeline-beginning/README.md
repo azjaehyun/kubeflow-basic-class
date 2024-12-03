@@ -1,233 +1,283 @@
-# 쿠베플로우 파이프라인 문법 학습 커리큘럼
 
-## 목차
+# Kubeflow Pipelines DSL 문법 정리
 
-1. [쿠베플로우 파이프라인 소개](#1-쿠베플로우-파이프라인-소개)
-2. [환경 설정](#2-환경-설정)
-3. [파이프라인 컴포넌트 이해](#3-파이프라인-컴포넌트-이해)
-4. [파이프라인 컴포넌트 생성](#4-파이프라인-컴포넌트-생성)
-5. [파이프라인 정의](#5-파이프라인-정의)
-6. [고급 파이프라인 기능](#6-고급-파이프라인-기능)
-7. [캐싱 및 재사용](#7-캐싱-및-재사용)
-8. [시각화 및 메트릭](#8-시각화-및-메트릭)
-9. [파이프라인 배포](#9-파이프라인-배포)
-10. [베스트 프랙티스](#10-베스트-프랙티스)
+## 1. Pipeline 정의
+### 설명
+파이프라인은 작업(`ContainerOp`)을 연결하여 전체 워크플로를 정의합니다.
 
----
+### 문법
+```python
+@dsl.pipeline(
+    name='Pipeline Name',
+    description='Pipeline Description'
+)
+def my_pipeline(param1: str, param2: int):
+    # 작업 정의 및 연결
+    pass
+```
 
-## 1. 쿠베플로우 파이프라인 소개
-
-쿠베플로우 파이프라인은 머신러닝 워크플로우를 구축하고 배포하기 위한 플랫폼입니다. 쿠버네티스 위에서 실행되며, 컨테이너화된 컴포넌트들을 연결하여 복잡한 머신러닝 작업을 자동화할 수 있습니다.
-
-- **개념과 중요성**: 머신러닝 모델의 개발부터 배포까지의 과정은 복잡하고 반복적인 작업이 많습니다. 쿠베플로우 파이프라인은 이러한 과정을 자동화하여 생산성을 높이고 재현성을 보장합니다.
-
-- **아키텍처 및 주요 구성 요소**:
-  - **컴포넌트(Component)**: 독립적으로 실행되는 단위 작업으로, 특정 기능을 수행합니다.
-  - **파이프라인(Pipeline)**: 여러 컴포넌트를 연결하여 전체 워크플로우를 정의합니다.
-  - **실행(Run)**: 파이프라인을 실행한 인스턴스로, 실제 작업이 수행됩니다.
-  - **아티팩트(Artifact)**: 컴포넌트 간에 전달되는 데이터나 모델 등입니다.
-
----
-
-## 2. 환경 설정
-
-쿠베플로우 파이프라인을 사용하기 위해서는 개발 환경과 실행 환경을 설정해야 합니다.
-
-- **쿠베플로우 파이프라인 SDK 설치**:
-  - 파이썬 환경에서 `kfp` 패키지를 설치하여 SDK를 사용할 수 있습니다.
-  - 설치 방법:
-
-    ```bash
-    pip install kfp
-    ```
-
-- **쿠버네티스 클러스터에 쿠베플로우 설치**:
-  - 미니쿠베(minikube)나 실제 클러스터에 쿠베플로우를 배포합니다.
-  - 쿠베플로우 설치는 `kfctl` 도구나 매니페스트를 통해 수행됩니다.
-
----
-
-## 3. 파이프라인 컴포넌트 이해
-
-컴포넌트는 파이프라인의 기본 단위로, 하나의 작업을 수행합니다.
-
-- **컴포넌트의 정의와 역할**:
-  - 각 컴포넌트는 입력을 받아 처리를 수행하고 출력을 생성합니다.
-  - 컴포넌트는 컨테이너로 패키징되어 실행됩니다.
-
-- **컴포넌트 구조 분석**:
-  - **인터페이스**: 입력과 출력의 타입과 이름을 정의합니다.
-  - **구현**: 실제 작업을 수행하는 코드입니다.
-  - **메타데이터**: 컴포넌트의 이름, 설명 등을 포함합니다.
-
-- **파이썬 함수를 이용한 컴포넌트 생성**:
-  - `kfp.components.create_component_from_func` 함수를 사용하여 파이썬 함수를 컴포넌트로 변환할 수 있습니다.
-
----
-
-## 4. 파이프라인 컴포넌트 생성
-
-컴포넌트를 생성하는 방법을 알아봅니다.
-
-- **`@component` 데코레이터 사용법**:
-  - 파이썬 함수에 `@component` 데코레이터를 적용하여 컴포넌트를 생성합니다.
-  - 예시:
-
-    ```python
-    from kfp.components import component
-
-    @component
-    def add(a: float, b: float) -> float:
-        return a + b
-    ```
-
-- **입력 및 출력 타입 정의**:
-  - 함수 인자에 타입 힌트를 사용하여 입력 타입을 정의합니다.
-  - 반환 타입도 명시하여 출력 타입을 정의합니다.
-
-- **컴포넌트 패키징 및 재사용**:
-  - 생성된 컴포넌트를 패키징하여 다른 파이프라인에서도 재사용할 수 있습니다.
-  - 컴포넌트를 YAML 파일로 저장하거나 컨테이너 이미지로 빌드합니다.
-
----
-
-## 5. 파이프라인 정의
-
-여러 컴포넌트를 연결하여 파이프라인을 구성합니다.
-
-- **`@dsl.pipeline` 데코레이터 사용법**:
-  - 파이썬 함수에 `@dsl.pipeline` 데코레이터를 적용하여 파이프라인을 정의합니다.
-  - 예시:
-
-    ```python
-    from kfp import dsl
-
-    @dsl.pipeline(
-        name='Addition Pipeline',
-        description='An example pipeline that adds two numbers.'
+### 샘플 코드
+```python
+@dsl.pipeline(
+    name='Sample Pipeline',
+    description='A sample pipeline that demonstrates basic structure'
+)
+def sample_pipeline(input_path: str, output_path: str):
+    step1 = dsl.ContainerOp(
+        name='Step 1',
+        image='python:3.8-slim',
+        command=['echo', 'Hello, world!']
     )
-    def add_pipeline(a: float = 1, b: float = 7):
-        add_task = add(a, b)
-    ```
-
-- **컴포넌트 연결 및 데이터 전달**:
-  - 컴포넌트의 출력은 다음 컴포넌트의 입력으로 전달할 수 있습니다.
-  - 예시:
-
-    ```python
-    def multiply_pipeline(a: float = 1, b: float = 7):
-        add_task = add(a, b)
-        multiply_task = multiply(add_task.output, 10)
-    ```
-
-- **파이프라인 파라미터 설정**:
-  - 파이프라인 함수의 매개변수를 통해 실행 시 동적으로 값을 전달할 수 있습니다.
+```
 
 ---
 
-## 6. 고급 파이프라인 기능
+## 2. ContainerOp
+### 설명
+`ContainerOp`는 컨테이너 기반 작업을 정의합니다.
 
-복잡한 워크플로우를 구현하기 위한 고급 기능을 살펴봅니다.
+### 문법
+```python
+dsl.ContainerOp(
+    name='Task Name',
+    image='Docker Image',
+    command=['Command to run in container'],
+    arguments=['--arg1', 'value1']
+)
+```
 
-- **조건부 실행**:
-  - 특정 조건에 따라 컴포넌트를 실행할 수 있습니다.
-  - 예시:
-
-    ```python
-    with dsl.Condition(a > b):
-        subtract_task = subtract(a, b)
-    ```
-
-- **반복(loop) 구조**:
-  - 반복문을 사용하여 여러 입력에 대해 동일한 작업을 수행할 수 있습니다.
-  - `dsl.ParallelFor`를 사용합니다.
-
-    ```python
-    with dsl.ParallelFor(items) as item:
-        process_task = process(item)
-    ```
-
-- **병렬 실행**:
-  - 독립적인 컴포넌트는 병렬로 실행됩니다.
-  - 의존성이 없는 컴포넌트들은 자동으로 병렬 실행됩니다.
+### 샘플 코드
+```python
+step1 = dsl.ContainerOp(
+    name='Print Message',
+    image='alpine',
+    command=['echo'],
+    arguments=['Hello, Kubeflow!']
+)
+```
 
 ---
 
-## 7. 캐싱 및 재사용
+## 3. Pipeline Parameters
+### 설명
+파이프라인에 입력값을 전달하기 위한 매개변수입니다.
 
-파이프라인 실행 시간을 단축하기 위한 방법입니다.
+### 문법
+```python
+@dsl.pipeline(
+    name='Pipeline with Parameters',
+    description='Pipeline that uses parameters'
+)
+def pipeline_with_params(param1: str, param2: int):
+    pass
+```
 
-- **캐싱 활성화 방법**:
-  - 동일한 입력으로 실행된 컴포넌트의 결과를 재사용합니다.
-  - 파이프라인 실행 시 `enable_caching=True`로 설정합니다.
-
-- **파이프라인 실행 관리**:
-  - 실행된 파이프라인의 로그와 결과를 확인하고 관리합니다.
-  - UI나 CLI를 통해 실행 상태를 모니터링할 수 있습니다.
-
----
-
-## 8. 시각화 및 메트릭
-
-파이프라인 실행 결과를 분석하고 시각화합니다.
-
-- **메트릭 로깅 및 시각화**:
-  - 컴포넌트 내에서 메트릭을 로깅하여 결과를 시각화할 수 있습니다.
-  - `kfp.components.OutputPath`를 사용하여 메트릭 파일을 생성합니다.
-
-- **출력 결과 확인**:
-  - 파이프라인 실행 후 출력된 아티팩트를 확인합니다.
-  - UI에서 출력 파일이나 그래프를 볼 수 있습니다.
-
----
-
-## 9. 파이프라인 배포
-
-작성한 파이프라인을 실제로 실행합니다.
-
-- **파이프라인 컴파일 및 패키징**:
-  - `kfp.compiler.Compiler().compile()` 함수를 사용하여 파이프라인을 YAML 파일로 컴파일합니다.
-
-    ```python
-    kfp.compiler.Compiler().compile(
-        pipeline_func=add_pipeline,
-        package_path='add_pipeline.yaml'
+### 샘플 코드
+```python
+@dsl.pipeline(
+    name='Parameterized Pipeline',
+    description='A pipeline that demonstrates parameter usage'
+)
+def param_pipeline(message: str = 'Default Message'):
+    dsl.ContainerOp(
+        name='Print Message',
+        image='alpine',
+        command=['echo'],
+        arguments=[message]
     )
-    ```
+```
 
-- **파이프라인 실행 제출**:
-  - 컴파일된 파이프라인을 클러스터에 제출하여 실행합니다.
-  - `kfp.Client()`를 사용하여 파이프라인을 제출합니다.
+---
 
-    ```python
-    client = kfp.Client()
-    client.create_run_from_pipeline_func(
-        add_pipeline,
-        arguments={'a': 5, 'b': 10}
+## 4. Artifacts and Outputs
+### 설명
+작업 간 데이터를 전달하기 위한 파일 출력과 입력.
+
+### 문법
+```python
+step1 = dsl.ContainerOp(
+    name='Step 1',
+    image='alpine',
+    command=['sh', '-c'],
+    arguments=['echo "output" > /data/output'],
+    file_outputs={'output': '/data/output'}
+)
+
+step2 = dsl.ContainerOp(
+    name='Step 2',
+    image='alpine',
+    command=['cat'],
+    arguments=[step1.outputs['output']]
+)
+```
+
+---
+
+## 5. Volume (데이터 공유)
+### 설명
+작업 간 데이터를 공유하기 위해 볼륨을 사용.
+
+### 문법
+```python
+from kubernetes.client.models import V1Volume, V1VolumeMount
+
+volume = V1Volume(
+    name='shared-volume',
+    empty_dir={}
+)
+
+volume_mount = V1VolumeMount(
+    name='shared-volume',
+    mount_path='/data'
+)
+
+step1.add_volume(volume).add_volume_mount(volume_mount)
+```
+
+---
+
+## 6. Conditions
+### 설명
+조건부로 작업을 실행.
+
+### 문법
+```python
+with dsl.Condition(task.outputs['result'] == 'desired_value'):
+    task_to_run_if_condition_met
+```
+
+### 샘플 코드
+```python
+with dsl.Condition(step1.outputs['output'] == 'yes'):
+    dsl.ContainerOp(
+        name='Conditional Step',
+        image='alpine',
+        command=['echo', 'Condition met!']
     )
-    ```
+```
 
 ---
 
-## 10. 베스트 프랙티스
+## 7. Loops
+### 설명
+동일한 작업을 여러 값으로 반복 실행.
 
-효율적인 파이프라인 개발을 위한 권장 사항입니다.
-
-- **코드 구조화 및 관리**:
-  - 컴포넌트와 파이프라인 코드를 모듈화하여 관리합니다.
-  - 재사용 가능한 컴포넌트를 라이브러리로 구축합니다.
-
-- **디버깅 및 문제 해결**:
-  - 로깅을 통해 컴포넌트 내부 상태를 확인합니다.
-  - 에러 발생 시 로그를 분석하여 원인을 파악합니다.
-
----
-
-## 추가 자료
-
-- [Kubeflow 공식 문서](https://www.kubeflow.org/)
-- [Kubeflow Pipelines SDK 문서](https://www.kubeflow.org/docs/components/pipelines/sdk/)
+### 문법
+```python
+with dsl.ParallelFor(['a', 'b', 'c']) as item:
+    dsl.ContainerOp(
+        name='Loop Step',
+        image='alpine',
+        command=['echo', item]
+    )
+```
 
 ---
 
-이상으로 쿠베플로우 파이프라인 문법 학습을 위한 커리큘럼과 각 주제에 대한 자세한 설명을 제공했습니다. 학습하시면서 궁금하신 점이나 더 자세히 알고 싶은 부분이 있으시면 언제든지 문의해 주세요.
+## 8. Execution Options
+### 설명
+작업 실행 옵션 설정.
+
+### 문법
+```python
+step = dsl.ContainerOp(
+    name='Step',
+    image='alpine',
+    command=['echo', 'Hello']
+)
+
+step.set_cpu_limit('1').set_memory_limit('512Mi').set_gpu_limit(1)
+```
+
+---
+
+## 9. ResourceOps
+### 설명
+Kubernetes 리소스를 직접 생성하거나 관리.
+
+### 문법
+```python
+k8s_op = dsl.ResourceOp(
+    name='Create PVC',
+    k8s_resource={
+        'apiVersion': 'v1',
+        'kind': 'PersistentVolumeClaim',
+        'metadata': {'name': 'my-pvc'},
+        'spec': {
+            'accessModes': ['ReadWriteOnce'],
+            'resources': {'requests': {'storage': '1Gi'}}
+        }
+    }
+)
+```
+
+---
+
+## 10. Compiling the Pipeline
+### 설명
+파이프라인을 YAML로 컴파일.
+
+### 문법
+```python
+kfp.compiler.Compiler().compile(my_pipeline, 'pipeline.yaml')
+```
+
+### 샘플 코드
+```python
+kfp.compiler.Compiler().compile(sample_pipeline, 'sample_pipeline.yaml')
+```
+
+---
+
+## 11. Submitting the Pipeline
+### 설명
+Kubeflow UI 또는 SDK를 통해 파이프라인 제출.
+
+### 샘플 코드
+```python
+import kfp
+client = kfp.Client()
+client.create_run_from_pipeline_func(
+    my_pipeline,
+    arguments={'param1': 'value1', 'param2': 10}
+)
+```
+
+---
+
+## 종합 예제
+```python
+@dsl.pipeline(
+    name='Comprehensive Example',
+    description='Demonstrating Kubeflow Pipelines DSL features'
+)
+def comprehensive_pipeline(message: str = 'Hello'):
+    step1 = dsl.ContainerOp(
+        name='Step 1',
+        image='alpine',
+        command=['echo', message]
+    )
+
+    with dsl.Condition(step1.outputs['output'] == 'Hello'):
+        dsl.ContainerOp(
+            name='Conditional Step',
+            image='alpine',
+            command=['echo', 'Condition met!']
+        )
+
+    with dsl.ParallelFor(['a', 'b', 'c']) as item:
+        dsl.ContainerOp(
+            name='Loop Step',
+            image='alpine',
+            command=['echo', item]
+        )
+```
+
+---
+
+## 요약
+1. 파이프라인은 `@dsl.pipeline`으로 정의.
+2. 각 작업은 `dsl.ContainerOp`으로 정의.
+3. 조건, 반복, 출력 공유 등 다양한 제어 기능을 제공.
+4. YAML로 컴파일 후 Kubeflow UI나 SDK로 실행.
+
