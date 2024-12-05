@@ -211,9 +211,217 @@ k8s_op = dsl.ResourceOp(
 )
 ```
 
+## 10. 데이터 의존성(Data Dependency)
+
+### 설명
+
+- **개념**: 한 작업의 출력이 다음 작업의 입력으로 사용될 때, 자동으로 작업 순서가 결정됩니다.
+- **장점**: 데이터 흐름에 따라 작업 순서가 자연스럽게 결정되므로, 별도의 의존성 설정이 필요 없습니다.
+
+### 예제 코드
+
+```python
+from kfp import dsl
+
+# 컴포넌트 A 정의
+@dsl.component
+def a_op() -> str:
+    print("작업 A 실행")
+    return "A의 출력"
+
+# 컴포넌트 B 정의
+@dsl.component
+def b_op(input_from_a: str) -> str:
+    print(f"작업 B 실행, 입력: {input_from_a}")
+    return "B의 출력"
+
+# 파이프라인 정의
+@dsl.pipeline(
+    name='데이터 의존성 예제',
+    description='데이터 의존성을 활용한 작업 순서 제어 예제'
+)
+def data_dependency_pipeline():
+    # 작업 A 실행
+    a_task = a_op()
+    # 작업 A의 출력을 입력으로 받아 작업 B 실행
+    b_task = b_op(input_from_a=a_task.output)
+
+if __name__ == '__main__':
+    from kfp import compiler
+    compiler.Compiler().compile(data_dependency_pipeline, 'data_dependency_pipeline.yaml')
+```
+
+### 결과
+
+- `a_op`가 먼저 실행되고, 그 출력이 `b_op`의 입력으로 사용됩니다.
+- 따라서 `a_op`가 완료된 후 `b_op`가 실행됩니다.
+
+---
+---  
+    
+
+
+
+
+##  의존성 설정 메서드(Dependency Methods) 
+### 11. `after` 메서드
+
+### 설명
+
+- **개념**: 특정 작업이 다른 작업이 완료된 후에 실행되도록 지정합니다.
+- **사용법**: `task2.after(task1)` 형태로 사용하며, `task1`이 완료된 후 `task2`가 실행됩니다.
+- **주의사항**: 데이터 의존성이 없는 경우에 주로 사용됩니다.
+
+### 예제 코드
+
+```python
+from kfp import dsl
+
+# 컴포넌트 A 정의
+@dsl.component
+def a_op():
+    print("작업 A 실행")
+
+# 컴포넌트 B 정의
+@dsl.component
+def b_op():
+    print("작업 B 실행")
+
+# 컴포넌트 C 정의
+@dsl.component
+def c_op():
+    print("작업 C 실행")
+
+# 파이프라인 정의
+@dsl.pipeline(
+    name='after 메서드 예제',
+    description='after 메서드를 활용한 작업 순서 제어 예제'
+)
+def after_method_pipeline():
+    # 작업 A 실행
+    a_task = a_op()
+    # 작업 B 실행
+    b_task = b_op()
+    # 작업 C는 작업 A와 B가 완료된 후 실행
+    c_task = c_op()
+    c_task.after(a_task, b_task)
+
+if __name__ == '__main__':
+    from kfp import compiler
+    compiler.Compiler().compile(after_method_pipeline, 'after_method_pipeline.yaml')
+```
+
+### 결과
+
+- `a_op`와 `b_op`는 동시에 실행됩니다.
+- `c_op`는 `a_op`와 `b_op`가 모두 완료된 후에 실행됩니다.
+
+### 12. `depends_on` 메서드
+
+### 설명
+
+- **개념**: 여러 작업에 대한 의존성을 리스트로 지정할 수 있습니다.
+- **사용법**: `task.depends_on = [task1, task2]` 형태로 사용합니다.
+- **주의사항**: Kubeflow Pipelines SDK의 버전에 따라 `depends_on` 메서드의 지원 여부가 다를 수 있습니다.
+
+### 예제 코드
+
+```python
+from kfp import dsl
+
+# 컴포넌트 A 정의
+@dsl.component
+def a_op():
+    print("작업 A 실행")
+
+# 컴포넌트 B 정의
+@dsl.component
+def b_op():
+    print("작업 B 실행")
+
+# 컴포넌트 D 정의
+@dsl.component
+def d_op():
+    print("작업 D 실행")
+
+# 파이프라인 정의
+@dsl.pipeline(
+    name='depends_on 메서드 예제',
+    description='depends_on 메서드를 활용한 작업 순서 제어 예제'
+)
+def depends_on_pipeline():
+    # 작업 A 실행
+    a_task = a_op()
+    # 작업 B 실행
+    b_task = b_op()
+    # 작업 D는 작업 A와 B가 완료된 후 실행
+    d_task = d_op()
+    d_task.depends_on = [a_task, b_task]
+
+if __name__ == '__main__':
+    from kfp import compiler
+    compiler.Compiler().compile(depends_on_pipeline, 'depends_on_pipeline.yaml')
+```
+
+### 결과
+
+- `a_op`와 `b_op`는 동시에 실행됩니다.
+- `d_op`는 `a_op`와 `b_op`가 모두 완료된 후에 실행됩니다.
+
 ---
 
-## 10. Compiling the Pipeline
+## 13. 조건부 실행(Conditional Execution)
+
+특정 조건에 따라 작업을 실행하거나 건너뛸 수 있습니다.
+
+### 3.1 `dsl.Condition` 사용
+
+### 설명
+
+- **개념**: 조건에 따라 특정 블록 내의 작업을 실행합니다.
+- **사용법**: `with dsl.Condition(condition_expression):` 형태로 사용합니다.
+
+### 예제 코드
+
+```python
+from kfp import dsl
+
+# 컴포넌트 A 정의
+@dsl.component
+def a_op() -> int:
+    print("작업 A 실행")
+    return 5  # 예를 들어 숫자 5를 반환
+
+# 컴포넌트 B 정의
+@dsl.component
+def b_op():
+    print("작업 B 실행")
+
+# 파이프라인 정의
+@dsl.pipeline(
+    name='조건부 실행 예제',
+    description='조건에 따라 작업을 실행하는 예제'
+)
+def conditional_pipeline():
+    # 작업 A 실행
+    a_task = a_op()
+    # 조건부로 작업 B 실행
+    with dsl.Condition(a_task.output > 3):
+        b_task = b_op()
+
+if __name__ == '__main__':
+    from kfp import compiler
+    compiler.Compiler().compile(conditional_pipeline, 'conditional_pipeline.yaml')
+```
+
+### 결과
+
+- `a_op`의 출력이 3보다 크면 `b_op`가 실행됩니다.
+- 그렇지 않으면 `b_op`는 실행되지 않습니다.
+
+---
+
+## 14. Compiling the Pipeline
 ### 설명
 파이프라인을 YAML로 컴파일.
 
@@ -229,7 +437,7 @@ kfp.compiler.Compiler().compile(sample_pipeline, 'sample_pipeline.yaml')
 
 ---
 
-## 11. Submitting the Pipeline
+## 17. Submitting the Pipeline
 ### 설명
 Kubeflow UI 또는 SDK를 통해 파이프라인 제출.
 
@@ -245,35 +453,6 @@ client.create_run_from_pipeline_func(
 
 ---
 
-## 종합 예제
-```python
-@dsl.pipeline(
-    name='Comprehensive Example',
-    description='Demonstrating Kubeflow Pipelines DSL features'
-)
-def comprehensive_pipeline(message: str = 'Hello'):
-    step1 = dsl.ContainerOp(
-        name='Step 1',
-        image='alpine',
-        command=['echo', message]
-    )
-
-    with dsl.Condition(step1.outputs['output'] == 'Hello'):
-        dsl.ContainerOp(
-            name='Conditional Step',
-            image='alpine',
-            command=['echo', 'Condition met!']
-        )
-
-    with dsl.ParallelFor(['a', 'b', 'c']) as item:
-        dsl.ContainerOp(
-            name='Loop Step',
-            image='alpine',
-            command=['echo', item]
-        )
-```
-
----
 
 ## 요약
 1. 파이프라인은 `@dsl.pipeline`으로 정의.
