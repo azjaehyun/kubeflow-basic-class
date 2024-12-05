@@ -1,6 +1,8 @@
 속성기반 감정분석(Aspect Based Sentiment Analysis)
 ====================================
-__NIA 데이터 구축과제(ABSA)__ 의 데이터 품질 검사용으로 구현된 소스
+__NIA 데이터 구축과제(ABSA)__ 의 데이터 품질 검사용으로 구현된 소스 
+- AIhub 활용 :  https://www.aihub.or.kr/aihubdata/data/view.do?currMenu=&topMenu=&aihubDataSe=data&dataSetSn=71603
+
 
 - __목적__ 
     - 구축된 데이터셋이 유효한 데이터셋인지 검증하기 위함 (데이터 품질 검사)
@@ -12,6 +14,52 @@ __NIA 데이터 구축과제(ABSA)__ 의 데이터 품질 검사용으로 구현
     - Asepct Category f1score : 80% 이상 달성
   - 목표 구축 데이터 수: 25만건
 
+## 해당 모델 샘플 요청 및 예시 응답
+### 요청 예시
+```bash
+curl -X POST "http://localhost:8000/predict" -H "Content-Type: application/json" -d '{"text": "이 제품 정말 좋아요!"}'
+```
+
+### 예시 응답
+```json
+{
+    "sentiment": "긍정",       // 감정 레이블: 긍정적이라는 예측
+    "aspect": "제품",          // 속성 레이블: 제품 관련 평가라는 예측
+    "aspect2": "기능성"        // 대분류 속성 레이블: 기능성에 관한 평가라는 예측
+}
+```
+
+### 결과 설명
+- **"sentiment": "긍정"**: 모델은 입력된 텍스트에 대해 긍정적인 평가라고 예측했습니다. 감정 레이블은 "긍정", "부정", "중립" 등이 될 수 있습니다.
+- **"aspect": "제품"**: 모델은 이 문장이 제품에 관한 것이라고 예측했습니다. 속성 레이블은 "제품", "서비스", "가격", "배송" 등과 같은 다양한 속성으로 나뉠 수 있습니다.
+- **"aspect2": "기능성"**: 제품의 기능적인 면에 대한 평가라는 예측을 나타냅니다. 대분류 속성은 "기능성", "품질", "디자인", "편리성" 등으로 나눌 수 있습니다.
+
+### 추가 예시
+- 요청: `배송이 너무 느렸어요.`
+  ```bash
+  curl -X POST "http://localhost:8000/predict" -H "Content-Type: application/json" -d '{"text": "배송이 너무 느렸어요."}'
+  ```
+  결과:
+  ```json
+  {
+      "sentiment": "부정",        // 감정 레이블: 부정적인 평가
+      "aspect": "배송",          // 속성 레이블: 배송과 관련된 문제
+      "aspect2": "속도"          // 대분류 속성 레이블: 배송 속도가 느리다는 평가
+  }
+  ```
+
+- 요청: `고객 서비스가 훌륭했어요!`
+  ```bash
+  curl -X POST "http://localhost:8000/predict" -H "Content-Type: application/json" -d '{"text": "고객 서비스가 훌륭했어요!"}'
+  ```
+  결과:
+  ```json
+  {
+      "sentiment": "긍정",       // 감정 레이블: 긍정적인 평가
+      "aspect": "서비스",        // 속성 레이블: 고객 서비스와 관련된 평가
+      "aspect2": "응대 품질"     // 대분류 속성 레이블: 서비스 응대의 품질에 대한 평가
+  }
+  ```
     
 ## Model Description
 ***
